@@ -29,7 +29,11 @@ export async function fetchBtcHistory(): Promise<DailyPrice[]> {
   }
 
   const json: CryptoCompareResponse = await res.json();
-  const raw = json.Data.Data;
+  const raw = json?.Data?.Data;
+
+  if (!Array.isArray(raw)) {
+    throw new Error("Invalid CryptoCompare response format");
+  }
 
   return raw
     .filter((d) => d.close > 0)

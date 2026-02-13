@@ -75,7 +75,7 @@ export class TwoHundredWMA implements Indicator {
         { key: "returnFromTouch", label: "Return From Touch" },
       ],
       trigger: (data, i, computed) => {
-        if (isNaN(computed[i])) return null;
+        if (isNaN(computed[i]) || computed[i] === 0) return null;
         const ratio = data[i].close / computed[i];
         // Triggered when price is within 5% above/below the 200WMA
         if (ratio > 1 + TOUCH_THRESHOLD || ratio < 1 - TOUCH_THRESHOLD)
@@ -130,7 +130,7 @@ export class TwoHundredWMA implements Indicator {
     });
 
     // Current distance from 200WMA
-    const distancePercent = Math.round(
+    const distancePercent = currentWMA === 0 ? 0 : Math.round(
       ((currentPrice - currentWMA) / currentWMA) * 100
     );
     const distanceLabel =
@@ -145,7 +145,7 @@ export class TwoHundredWMA implements Indicator {
 
     if (currentYear > lastRowYear) {
       backtest.rows.push({
-        date: formatDate(prices[prices.length - 1].date),
+        date: formatDate(weekly[weekly.length - 1].date),
         wma: formatCurrency(Math.round(currentWMA)),
         timeNear: distanceLabel,
         returnFromTouch:

@@ -1,4 +1,5 @@
 export function formatCurrency(value: number): string {
+  if (!isFinite(value)) return "N/A";
   if (value >= 1000) {
     return (
       "$" +
@@ -18,6 +19,7 @@ export function formatCurrency(value: number): string {
 }
 
 export function formatPercent(value: number): string {
+  if (!isFinite(value)) return "N/A";
   const sign = value >= 0 ? "+" : "";
   return `${sign}${value.toLocaleString("en-US", {
     minimumFractionDigits: 0,
@@ -26,6 +28,7 @@ export function formatPercent(value: number): string {
 }
 
 export function formatNumber(value: number, decimals = 2): string {
+  if (!isFinite(value)) return "N/A";
   return value.toLocaleString("en-US", {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,

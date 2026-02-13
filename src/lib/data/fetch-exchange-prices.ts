@@ -18,16 +18,19 @@ export async function fetchBinancePrices(
 
   if (!res.ok) throw new Error(`Binance API error: ${res.status}`);
 
-  const data: Array<(string | number)[]> = await res.json();
+  const data = await res.json();
+  if (!Array.isArray(data)) return [];
 
-  return data.map((k) => {
-    const ts = Math.floor((k[0] as number) / 1000); // ms → seconds
-    return {
-      timestamp: ts,
-      date: new Date(ts * 1000).toISOString().split("T")[0],
-      close: parseFloat(k[4] as string),
-    };
-  });
+  return data
+    .filter((k) => Array.isArray(k) && k.length >= 5)
+    .map((k) => {
+      const ts = Math.floor((k[0] as number) / 1000);
+      return {
+        timestamp: ts,
+        date: new Date(ts * 1000).toISOString().split("T")[0],
+        close: parseFloat(k[4] as string),
+      };
+    });
 }
 
 /**
@@ -55,9 +58,11 @@ export async function fetchCoinbasePrices(
 
     if (!res.ok) throw new Error(`Coinbase API error: ${res.status}`);
 
-    const data: number[][] = await res.json();
+    const data = await res.json();
+    if (!Array.isArray(data)) continue;
 
     for (const candle of data) {
+      if (!Array.isArray(candle) || candle.length < 5) continue;
       results.push({
         timestamp: candle[0],
         date: new Date(candle[0] * 1000).toISOString().split("T")[0],

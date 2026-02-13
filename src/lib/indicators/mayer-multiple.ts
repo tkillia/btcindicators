@@ -36,7 +36,7 @@ export class MayerMultiple implements Indicator {
 
     // Compute Mayer Multiple for each day
     const mayerValues = closes.map((close, i) =>
-      isNaN(sma200[i]) ? NaN : close / sma200[i]
+      isNaN(sma200[i]) || sma200[i] === 0 ? NaN : close / sma200[i]
     );
 
     const currentMayer = mayerValues[mayerValues.length - 1];
