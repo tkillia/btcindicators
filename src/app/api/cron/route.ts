@@ -5,5 +5,6 @@ export async function GET() {
   revalidateTag("btc-data");
   revalidateTag("stablecoin-data");
   revalidateTag("exchange-data");
+  revalidateTag("bitfinex-data");
   return NextResponse.json({ revalidated: true, now: Date.now() });
 }
