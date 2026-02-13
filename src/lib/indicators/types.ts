@@ -42,5 +42,5 @@ export interface IndicatorResult {
 export interface Indicator {
   id: string;
   name: string;
-  calculate(prices: DailyPrice[]): IndicatorResult;
+  calculate(prices: DailyPrice[]): IndicatorResult | Promise<IndicatorResult>;
 }

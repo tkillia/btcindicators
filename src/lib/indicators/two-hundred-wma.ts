@@ -11,24 +11,21 @@ import { Indicator, IndicatorResult } from "./types";
 const WMA_PERIOD = 200;
 const TOUCH_THRESHOLD = 0.05; // within 5% of 200WMA
 
+const SECONDS_PER_WEEK = 7 * 24 * 60 * 60;
+
 function resampleToWeekly(prices: DailyPrice[]): DailyPrice[] {
   const weekly: DailyPrice[] = [];
   let currentWeek = -1;
 
   for (const p of prices) {
-    const d = new Date(p.timestamp * 1000);
-    // ISO week number approach: use getTime to compute week
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    const week = Math.floor(
-      (d.getTime() - yearStart.getTime()) / (7 * 24 * 60 * 60 * 1000)
-    );
-    const weekKey = d.getUTCFullYear() * 100 + week;
+    // Continuous week number from Unix epoch — no year-boundary splits
+    const week = Math.floor(p.timestamp / SECONDS_PER_WEEK);
 
-    if (weekKey !== currentWeek) {
+    if (week !== currentWeek) {
       weekly.push({ ...p });
-      currentWeek = weekKey;
+      currentWeek = week;
     } else {
-      // Update the last entry with this day's close (last day of the week)
+      // Keep the last day of each week (latest close)
       weekly[weekly.length - 1] = { ...p };
     }
   }
