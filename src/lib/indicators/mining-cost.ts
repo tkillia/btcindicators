@@ -62,7 +62,7 @@ export class MiningCost implements Indicator {
         ],
       },
       chartConfig: { type: "line+line", logScale: true },
-      backtestTitle: "Every time BTC dropped below 1.5x mining cost",
+      backtestTitle: "Every time BTC dropped below 2x mining cost",
       backtestColumns: ["Date", "Mining Cost", "BTC Price", "Ratio", "6mo Return"],
       backtestRows: backtestRows,
     };
@@ -104,7 +104,7 @@ function buildCostBacktest(
     if (!btcPrice) continue;
 
     const ratio = btcPrice / cost;
-    if (ratio > 1.5) continue;
+    if (ratio > 2) continue;
 
     // Look ahead 180 days
     const priceIdx = priceByIndex.get(miningData[i].date);

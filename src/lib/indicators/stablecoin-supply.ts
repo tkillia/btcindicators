@@ -13,7 +13,8 @@ import { Indicator, IndicatorResult } from "./types";
 const MOMENTUM_PERIOD = 30; // 30-day rate of change
 const BULLISH_THRESHOLD = 3; // 30d change > 3% = expanding
 const BEARISH_THRESHOLD = -1; // 30d change < -1% = contracting
-const BACKTEST_COOLDOWN = 90;
+const BACKTEST_GROWTH_THRESHOLD = 5; // 30d growth > 5% = rapid expansion
+const BACKTEST_COOLDOWN = 60;
 
 function formatSupply(value: number): string {
   if (value >= 1e12) return `$${(value / 1e12).toFixed(1)}T`;
@@ -72,9 +73,9 @@ export class StablecoinSupply implements Indicator {
       }
     }
 
-    // Backtest: every time supply hit a new ATH after being below it
-    // (signals new liquidity expansion after a contraction)
-    const backtestRows = buildNewAthBacktest(supplyData, prices);
+    // Backtest: every time 30d supply growth exceeded threshold
+    // (rapid liquidity expansion — historically bullish for BTC)
+    const backtestRows = buildGrowthBacktest(supplyData, roc30d, prices);
 
     return {
       id: this.id,
@@ -95,66 +96,56 @@ export class StablecoinSupply implements Indicator {
         ],
       },
       chartConfig: { type: "line+line", logScale: false },
-      backtestTitle: "Every time supply set new ATH (after pullback)",
-      backtestColumns: ["Date", "Supply", "BTC Price", "BTC 6mo Return"],
+      backtestTitle: `Every time 30d supply growth exceeded ${BACKTEST_GROWTH_THRESHOLD}%`,
+      backtestColumns: ["Date", "Supply", "30d Growth", "BTC Price", "BTC 3mo Return"],
       backtestRows: backtestRows,
     };
   }
 }
 
 /**
- * Find every time combined stablecoin supply set a new ATH
- * after having pulled back at least 5% from the previous ATH.
- * Then look at what BTC did over the next 6 months.
+ * Backtest: every time stablecoin supply grew >5% in 30 days.
+ * Rapid liquidity expansion signals new capital entering crypto.
  */
-function buildNewAthBacktest(
+function buildGrowthBacktest(
   supplyData: StablecoinDataPoint[],
+  roc30d: number[],
   btcPrices: DailyPrice[]
 ): Record<string, string | number>[] {
   const rows: Record<string, string | number>[] = [];
-  let ath = 0;
-  let hadPullback = false;
   let lastTriggerIdx = -Infinity;
 
-  // Build BTC price lookup by date
   const btcByDate = new Map<string, number>();
   for (const p of btcPrices) {
     btcByDate.set(p.date, p.close);
   }
 
   for (let i = 0; i < supplyData.length; i++) {
-    const supply = supplyData[i].supply;
+    if (i - lastTriggerIdx < BACKTEST_COOLDOWN) continue;
+    if (isNaN(roc30d[i]) || roc30d[i] < BACKTEST_GROWTH_THRESHOLD) continue;
 
-    if (supply > ath) {
-      if (hadPullback && i - lastTriggerIdx >= BACKTEST_COOLDOWN) {
-        // New ATH after a pullback — this is our signal
-        const btcPrice = btcByDate.get(supplyData[i].date);
-        if (btcPrice) {
-          // Look ahead 180 days for BTC return
-          const futureDate = new Date(supplyData[i].timestamp * 1000);
-          futureDate.setUTCDate(futureDate.getUTCDate() + 180);
-          const futureDateStr = futureDate.toISOString().split("T")[0];
-          const futureBtcPrice = btcByDate.get(futureDateStr);
+    const btcPrice = btcByDate.get(supplyData[i].date);
+    if (!btcPrice) continue;
 
-          const return6m = futureBtcPrice
-            ? ((futureBtcPrice - btcPrice) / btcPrice) * 100
-            : NaN;
+    // Look ahead 90 days for BTC return
+    const futureDate = new Date(supplyData[i].timestamp * 1000);
+    futureDate.setUTCDate(futureDate.getUTCDate() + 90);
+    const futureDateStr = futureDate.toISOString().split("T")[0];
+    const futureBtcPrice = btcByDate.get(futureDateStr);
 
-          rows.push({
-            date: formatDate(supplyData[i].date),
-            supply: formatSupply(supply),
-            btcPrice: `$${btcPrice.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
-            btcReturn: isNaN(return6m) ? "?" : formatPercent(return6m),
-          });
+    const return3m = futureBtcPrice
+      ? ((futureBtcPrice - btcPrice) / btcPrice) * 100
+      : NaN;
 
-          lastTriggerIdx = i;
-        }
-      }
-      ath = supply;
-      hadPullback = false;
-    } else if (supply < ath * 0.95) {
-      hadPullback = true;
-    }
+    rows.push({
+      date: formatDate(supplyData[i].date),
+      supply: formatSupply(supplyData[i].supply),
+      growth: formatPercent(roc30d[i]),
+      btcPrice: `$${btcPrice.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
+      btcReturn: isNaN(return3m) ? "?" : formatPercent(return3m),
+    });
+
+    lastTriggerIdx = i;
   }
 
   return rows;

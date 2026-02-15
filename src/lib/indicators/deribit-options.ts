@@ -10,6 +10,8 @@ import { Indicator, IndicatorResult } from "./types";
 // Put/call ratio thresholds
 const FEAR_THRESHOLD = 0.7; // high put/call = fear = contrarian buy
 const GREED_THRESHOLD = 0.4; // low put/call = greed = contrarian sell
+const DVOL_SPIKE = 65; // backtest trigger: elevated implied vol
+const DVOL_COOLDOWN = 30;
 
 export class DeribitOptions implements Indicator {
   id = "deribit-options";
@@ -18,7 +20,7 @@ export class DeribitOptions implements Indicator {
   async calculate(prices: DailyPrice[]): Promise<IndicatorResult> {
     const [summary, dvolHistory] = await Promise.allSettled([
       fetchDeribitOptionsSummary(),
-      fetchDeribitDVOL(365),
+      fetchDeribitDVOL(730),
     ]);
 
     const opts =
@@ -51,7 +53,7 @@ export class DeribitOptions implements Indicator {
       }
     }
 
-    // Backtest: when DVOL spiked above 80 (high fear), what did BTC do?
+    // Backtest: when DVOL spiked above threshold (high fear), what did BTC do?
     const btcByDate = new Map(prices.map((p) => [p.date, p.close]));
     const backtestRows = buildVolSpike(dvol, btcByDate);
 
@@ -77,7 +79,7 @@ export class DeribitOptions implements Indicator {
         ],
       },
       chartConfig: { type: "line+line", logScale: false },
-      backtestTitle: "Every time DVOL spiked above 80",
+      backtestTitle: `Every time DVOL spiked above ${DVOL_SPIKE}`,
       backtestColumns: ["Date", "DVOL", "BTC Price", "BTC 1mo Return"],
       backtestRows: backtestRows,
     };
@@ -92,8 +94,8 @@ function buildVolSpike(
   let lastTrigger = -Infinity;
 
   for (let i = 0; i < dvol.length; i++) {
-    if (i - lastTrigger < 30) continue;
-    if (dvol[i].iv < 80) continue;
+    if (i - lastTrigger < DVOL_COOLDOWN) continue;
+    if (dvol[i].iv < DVOL_SPIKE) continue;
 
     const btcPrice = btcByDate.get(dvol[i].date);
     if (!btcPrice) continue;

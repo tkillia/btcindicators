@@ -8,6 +8,8 @@ const SMA_PERIOD = 30;
 // When longs are significantly above/below their 30d average
 const BULLISH_THRESHOLD = 10; // 30d change > 10% = aggressive accumulation
 const BEARISH_THRESHOLD = -10;
+const SPIKE_THRESHOLD = 15; // backtest: longs >15% above SMA
+const SPIKE_COOLDOWN = 14;
 
 function formatLongs(value: number): string {
   if (value >= 1000) return `${(value / 1000).toFixed(1)}K BTC`;
@@ -19,7 +21,7 @@ export class BitfinexLongs implements Indicator {
   name = "Bitfinex Longs";
 
   async calculate(prices: DailyPrice[]): Promise<IndicatorResult> {
-    const longsData = await fetchBitfinexLongs(180);
+    const longsData = await fetchBitfinexLongs(365);
 
     if (longsData.length < 2) {
       return this.emptyResult();
@@ -50,7 +52,7 @@ export class BitfinexLongs implements Indicator {
       }
     }
 
-    // Backtest: when longs spike above SMA by >20%, what does BTC do?
+    // Backtest: when longs spike above SMA, what does BTC do?
     const btcByDate = new Map(prices.map((p) => [p.date, p.close]));
     const backtestRows = buildSpikeBacktest(longsData, sma30, btcByDate);
 
@@ -69,8 +71,8 @@ export class BitfinexLongs implements Indicator {
         ],
       },
       chartConfig: { type: "line+line", logScale: false },
-      backtestTitle: "When longs spike >20% above 30d SMA",
-      backtestColumns: ["Date", "Longs", "BTC Price", "BTC 1mo Return"],
+      backtestTitle: `When longs spike >${SPIKE_THRESHOLD}% above 30d SMA`,
+      backtestColumns: ["Date", "Longs", "Deviation", "BTC Price", "1mo Return"],
       backtestRows: backtestRows,
     };
   }
@@ -102,11 +104,11 @@ function buildSpikeBacktest(
   let lastTrigger = -Infinity;
 
   for (let i = 0; i < longsData.length; i++) {
-    if (i - lastTrigger < 14) continue;
+    if (i - lastTrigger < SPIKE_COOLDOWN) continue;
     if (isNaN(sma30[i]) || sma30[i] === 0) continue;
 
     const deviation = ((longsData[i].longs - sma30[i]) / sma30[i]) * 100;
-    if (deviation < 20) continue;
+    if (deviation < SPIKE_THRESHOLD) continue;
 
     const btcPrice = btcByDate.get(longsData[i].date);
     if (!btcPrice) continue;
@@ -124,6 +126,7 @@ function buildSpikeBacktest(
     rows.push({
       date: formatDate(longsData[i].date),
       longs: formatLongs(longsData[i].longs),
+      deviation: `+${deviation.toFixed(0)}%`,
       btcPrice: `$${btcPrice.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
       btcReturn: isNaN(ret) ? "?" : formatPercent(ret),
     });

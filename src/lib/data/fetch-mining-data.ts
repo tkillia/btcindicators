@@ -12,7 +12,7 @@ interface BlockchainChartResponse {
 
 async function fetchBlockchainChart(
   chart: string,
-  timespan = "3years"
+  timespan = "5years"
 ): Promise<Array<{ timestamp: number; date: string; value: number }>> {
   const res = await fetch(
     `https://api.blockchain.info/charts/${chart}?timespan=${timespan}&format=json&sampled=true`,
@@ -39,17 +39,33 @@ async function fetchBlockchainChart(
  * Assumptions (approximate industry average):
  * - Modern ASIC efficiency: ~25 J/TH (Antminer S21 class)
  * - Average electricity: $0.05/kWh
- * - Block reward: 3.125 BTC (post-April 2024 halving)
- * - ~144 blocks/day = 450 BTC/day
+ * - Block reward adjusts per halving schedule
+ * - ~144 blocks/day
  */
 const JOULES_PER_TH = 25;
 const ELECTRICITY_RATE = 0.05; // $/kWh
-const DAILY_BTC_MINED = 450; // 3.125 BTC × 144 blocks
+const BLOCKS_PER_DAY = 144;
+
+// BTC halving dates (approximate) and block rewards
+const HALVINGS: Array<{ date: string; reward: number }> = [
+  { date: "2012-11-28", reward: 25 },
+  { date: "2016-07-09", reward: 12.5 },
+  { date: "2020-05-11", reward: 6.25 },
+  { date: "2024-04-20", reward: 3.125 },
+];
+
+function getDailyBtcMined(date: string): number {
+  let reward = 50; // pre-first-halving
+  for (const h of HALVINGS) {
+    if (date >= h.date) reward = h.reward;
+  }
+  return reward * BLOCKS_PER_DAY;
+}
 
 export async function fetchMiningCost(): Promise<MiningDataPoint[]> {
   const [hashData, diffData] = await Promise.all([
-    fetchBlockchainChart("hash-rate", "3years"),
-    fetchBlockchainChart("difficulty", "3years"),
+    fetchBlockchainChart("hash-rate", "5years"),
+    fetchBlockchainChart("difficulty", "5years"),
   ]);
 
   // Build difficulty lookup by date
@@ -58,6 +74,7 @@ export async function fetchMiningCost(): Promise<MiningDataPoint[]> {
   return hashData.map((h) => {
     const hashrateTH = h.value; // already in TH/s
     const difficulty = diffByDate.get(h.date) ?? 0;
+    const dailyBtcMined = getDailyBtcMined(h.date);
 
     // Network power consumption: hashrate(TH/s) × J/TH = Watts
     // Daily energy: Watts × 24h / 1000 = kWh
@@ -66,7 +83,7 @@ export async function fetchMiningCost(): Promise<MiningDataPoint[]> {
     const networkWatts = hashrateTH * JOULES_PER_TH;
     const dailyKWh = (networkWatts * 24) / 1000;
     const dailyCost = dailyKWh * ELECTRICITY_RATE;
-    const costPerBTC = dailyCost / DAILY_BTC_MINED;
+    const costPerBTC = dailyBtcMined > 0 ? dailyCost / dailyBtcMined : 0;
 
     return {
       timestamp: h.timestamp,
