@@ -35,32 +35,40 @@ export async function fetchBinancePrices(
 
 /**
  * Fetch daily BTC-USD candles from Coinbase Exchange.
- * Free, no auth. Max 300 candles per request, so we paginate.
+ * Free, no auth. Max 300 candles per request — chunks fetched in parallel.
  */
 export async function fetchCoinbasePrices(
   days = 1000
 ): Promise<ExchangePrice[]> {
-  const results: ExchangePrice[] = [];
   const now = new Date();
   const chunkSize = 300;
 
+  // Pre-compute chunk ranges
+  const chunks: Array<{ start: string; end: string }> = [];
   for (let offset = 0; offset < days; offset += chunkSize) {
     const end = new Date(now);
     end.setUTCDate(end.getUTCDate() - offset);
     const start = new Date(end);
     start.setUTCDate(start.getUTCDate() - chunkSize);
+    chunks.push({ start: start.toISOString(), end: end.toISOString() });
+  }
 
-    const res = await fetch(
-      `https://api.exchange.coinbase.com/products/BTC-USD/candles?` +
-        `granularity=86400&start=${start.toISOString()}&end=${end.toISOString()}`,
-      { next: { tags: ["exchange-data"], revalidate: 86400 } }
-    );
+  // Fetch all chunks in parallel
+  const responses = await Promise.all(
+    chunks.map(({ start, end }) =>
+      fetch(
+        `https://api.exchange.coinbase.com/products/BTC-USD/candles?` +
+          `granularity=86400&start=${start}&end=${end}`,
+        { next: { tags: ["exchange-data"], revalidate: 86400 } }
+      )
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => [])
+    )
+  );
 
-    if (!res.ok) throw new Error(`Coinbase API error: ${res.status}`);
-
-    const data = await res.json();
+  const results: ExchangePrice[] = [];
+  for (const data of responses) {
     if (!Array.isArray(data)) continue;
-
     for (const candle of data) {
       if (!Array.isArray(candle) || candle.length < 5) continue;
       results.push({

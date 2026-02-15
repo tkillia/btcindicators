@@ -4,6 +4,9 @@ import { IndicatorGrid } from "@/components/dashboard/IndicatorGrid";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { IndicatorResult } from "@/lib/indicators/types";
 
+// Allow up to 60s for all indicator APIs to respond (Vercel Hobby max)
+export const maxDuration = 60;
+
 interface FailedIndicator {
   name: string;
   error: string;
