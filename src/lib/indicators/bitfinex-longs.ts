@@ -20,7 +20,7 @@ export class BitfinexLongs implements Indicator {
   name = "Bitfinex Longs";
 
   async calculate(prices: DailyPrice[]): Promise<IndicatorResult> {
-    const longsData = await fetchBitfinexLongs(365);
+    const longsData = await fetchBitfinexLongs(1095);
 
     if (longsData.length < 2) {
       return this.emptyResult();
