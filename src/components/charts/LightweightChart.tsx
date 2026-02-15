@@ -15,73 +15,88 @@ import { chartTheme } from "./ChartTheme";
 interface Props {
   data: ChartDataSet;
   config: ChartConfig;
-  height?: number;
 }
 
-export function LightweightChart({ data, config, height = 300 }: Props) {
+export function LightweightChart({ data, config }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const errorRef = useRef(false);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || errorRef.current) return;
 
-    const chart = createChart(containerRef.current, {
-      ...chartTheme,
-      height,
-      width: containerRef.current.clientWidth,
-      crosshair: { mode: CrosshairMode.Normal },
-    });
+    try {
+      const isMobile = containerRef.current.clientWidth < 500;
+      const height = isMobile ? 220 : 280;
 
-    if (config.logScale) {
-      chart.priceScale("right").applyOptions({
-        mode: PriceScaleMode.Logarithmic,
+      const chart = createChart(containerRef.current, {
+        ...chartTheme,
+        height,
+        width: containerRef.current.clientWidth || 300,
+        crosshair: { mode: CrosshairMode.Normal },
       });
-    }
 
-    // Add line series
-    if (data.lines) {
-      for (const line of data.lines) {
-        const series = chart.addSeries(LineSeries, {
-          color: line.color,
-          title: line.label,
-          lineWidth: 2,
+      if (config.logScale) {
+        chart.priceScale("right").applyOptions({
+          mode: PriceScaleMode.Logarithmic,
+        });
+      }
+
+      if (data.lines) {
+        for (const line of data.lines) {
+          if (line.data.length === 0) continue;
+          const series = chart.addSeries(LineSeries, {
+            color: line.color,
+            title: line.label,
+            lineWidth: 2,
+            priceLineVisible: false,
+          });
+          series.setData(
+            line.data.map((d) => ({ time: d.time, value: d.value }))
+          );
+        }
+      }
+
+      if (data.bars) {
+        const series = chart.addSeries(HistogramSeries, {
           priceLineVisible: false,
         });
         series.setData(
-          line.data.map((d) => ({ time: d.time, value: d.value }))
+          data.bars.map((b) => ({
+            time: b.time,
+            value: b.value,
+            color: b.color,
+          }))
         );
       }
-    }
 
-    // Add histogram/bar series
-    if (data.bars) {
-      const series = chart.addSeries(HistogramSeries, {
-        priceLineVisible: false,
+      chart.timeScale().fitContent();
+      chartRef.current = chart;
+
+      const resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          chart.applyOptions({ width: entry.contentRect.width });
+        }
       });
-      series.setData(
-        data.bars.map((b) => ({
-          time: b.time,
-          value: b.value,
-          color: b.color,
-        }))
-      );
-    }
+      resizeObserver.observe(containerRef.current);
 
-    chart.timeScale().fitContent();
-    chartRef.current = chart;
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        chart.applyOptions({ width: entry.contentRect.width });
+      return () => {
+        resizeObserver.disconnect();
+        chart.remove();
+      };
+    } catch {
+      errorRef.current = true;
+      if (containerRef.current) {
+        containerRef.current.innerHTML =
+          '<div class="w-full h-full flex items-center justify-center"><span class="text-muted text-xs">Chart unavailable</span></div>';
       }
-    });
-    resizeObserver.observe(containerRef.current);
+    }
+  }, [data, config]);
 
-    return () => {
-      resizeObserver.disconnect();
-      chart.remove();
-    };
-  }, [data, config, height]);
-
-  return <div ref={containerRef} className="w-full" />;
+  return (
+    <div
+      ref={containerRef}
+      className="w-full min-h-[220px] sm:min-h-[280px]"
+    />
+  );
 }

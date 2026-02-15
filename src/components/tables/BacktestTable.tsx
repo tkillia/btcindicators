@@ -16,21 +16,19 @@ function getCellColor(value: string | number): string {
 }
 
 export function BacktestTable({ title, columns, rows }: Props) {
-  const columnKeys = columns.map((_, i) => i);
-
   return (
-    <div className="mt-4">
-      <h3 className="text-xs font-medium uppercase tracking-wider text-muted mb-2">
+    <div className="mt-3 sm:mt-4">
+      <h3 className="text-[11px] sm:text-xs font-medium tracking-wider text-muted mb-2">
         Backtest: {title}
       </h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto -mx-1 px-1">
+        <table className="w-full text-xs sm:text-sm">
           <thead>
             <tr className="border-b border-border">
               {columns.map((col) => (
                 <th
                   key={col}
-                  className="py-2 px-3 text-left text-xs font-semibold uppercase tracking-wider text-muted"
+                  className="py-1.5 sm:py-2 px-2 sm:px-3 text-left text-[10px] sm:text-xs font-semibold tracking-wider text-muted whitespace-nowrap"
                 >
                   {col}
                 </th>
@@ -44,18 +42,22 @@ export function BacktestTable({ title, columns, rows }: Props) {
               return (
                 <tr
                   key={rowIdx}
-                  className={`border-b border-border/50 ${
-                    isLast ? "bg-accent-blue/5" : rowIdx % 2 === 0 ? "bg-card" : ""
+                  className={`border-b border-border/40 ${
+                    isLast
+                      ? "bg-accent-blue/10"
+                      : rowIdx % 2 === 0
+                        ? "bg-card"
+                        : ""
                   }`}
                 >
-                  {columnKeys.map((colIdx) => (
+                  {values.map((val, colIdx) => (
                     <td
                       key={colIdx}
-                      className={`py-2 px-3 font-mono text-sm ${getCellColor(
-                        values[colIdx]
+                      className={`py-1.5 sm:py-2 px-2 sm:px-3 font-mono text-xs whitespace-nowrap ${getCellColor(
+                        val
                       )}`}
                     >
-                      {String(values[colIdx] ?? "")}
+                      {String(val ?? "")}
                     </td>
                   ))}
                 </tr>

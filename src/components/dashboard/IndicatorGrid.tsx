@@ -6,8 +6,18 @@ interface Props {
 }
 
 export function IndicatorGrid({ results }: Props) {
+  if (results.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-muted text-sm">
+          No indicators loaded. Check API connections.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 lg:gap-5">
       {results.map((result) => (
         <IndicatorPanel key={result.id} result={result} />
       ))}

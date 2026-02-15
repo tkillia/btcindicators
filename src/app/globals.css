@@ -4,8 +4,9 @@
   --color-background: #0a0a0f;
   --color-foreground: #e4e4e7;
   --color-card: #12121a;
-  --color-border: #1e1e2e;
-  --color-muted: #a1a1aa;
+  --color-card-hover: #16161f;
+  --color-border: #232334;
+  --color-muted: #b4b4bd;
   --color-buy: #22c55e;
   --color-sell: #ef4444;
   --color-neutral: #eab308;
@@ -13,6 +14,10 @@
   --color-accent-amber: #f59e0b;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
