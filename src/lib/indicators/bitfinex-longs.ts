@@ -5,11 +5,10 @@ import { formatDate, formatPercent } from "../utils/format";
 import { Indicator, IndicatorResult } from "./types";
 
 const SMA_PERIOD = 30;
-// When longs are significantly above/below their 30d average
 const BULLISH_THRESHOLD = 10; // 30d change > 10% = aggressive accumulation
 const BEARISH_THRESHOLD = -10;
-const SPIKE_THRESHOLD = 10; // backtest: longs >10% above SMA
-const SPIKE_COOLDOWN = 14;
+const BACKTEST_ROC_THRESHOLD = 5; // 7d change > 5% = significant position increase
+const BACKTEST_COOLDOWN = 14;
 
 function formatLongs(value: number): string {
   if (value >= 1000) return `${(value / 1000).toFixed(1)}K BTC`;
@@ -35,7 +34,6 @@ export class BitfinexLongs implements Indicator {
       values.length > 30 ? values[values.length - 31] : values[0];
     const roc30d = prev30 > 0 ? ((current - prev30) / prev30) * 100 : 0;
 
-    // Signal: based on 30-day rate of change
     let signal: "buy" | "neutral" | "sell";
     if (roc30d > BULLISH_THRESHOLD) signal = "buy";
     else if (roc30d < BEARISH_THRESHOLD) signal = "sell";
@@ -52,9 +50,9 @@ export class BitfinexLongs implements Indicator {
       }
     }
 
-    // Backtest: when longs spike above SMA, what does BTC do?
+    // Backtest: when 7d longs increase exceeds threshold
     const btcByDate = new Map(prices.map((p) => [p.date, p.close]));
-    const backtestRows = buildSpikeBacktest(longsData, sma30, btcByDate);
+    const backtestRows = buildRocBacktest(longsData, btcByDate);
 
     return {
       id: this.id,
@@ -71,8 +69,8 @@ export class BitfinexLongs implements Indicator {
         ],
       },
       chartConfig: { type: "line+line", logScale: false },
-      backtestTitle: `When longs spike >${SPIKE_THRESHOLD}% above 30d SMA`,
-      backtestColumns: ["Date", "Longs", "Deviation", "BTC Price", "1mo Return"],
+      backtestTitle: `Every time weekly longs increased >${BACKTEST_ROC_THRESHOLD}%`,
+      backtestColumns: ["Date", "Longs", "7d Change", "BTC Price", "1mo Return"],
       backtestRows: backtestRows,
     };
   }
@@ -95,20 +93,21 @@ export class BitfinexLongs implements Indicator {
   }
 }
 
-function buildSpikeBacktest(
+function buildRocBacktest(
   longsData: Array<{ date: string; longs: number }>,
-  sma30: number[],
   btcByDate: Map<string, number>
 ): Record<string, string | number>[] {
   const rows: Record<string, string | number>[] = [];
   let lastTrigger = -Infinity;
 
-  for (let i = 0; i < longsData.length; i++) {
-    if (i - lastTrigger < SPIKE_COOLDOWN) continue;
-    if (isNaN(sma30[i]) || sma30[i] === 0) continue;
+  for (let i = 7; i < longsData.length; i++) {
+    if (i - lastTrigger < BACKTEST_COOLDOWN) continue;
 
-    const deviation = ((longsData[i].longs - sma30[i]) / sma30[i]) * 100;
-    if (deviation < SPIKE_THRESHOLD) continue;
+    const prev = longsData[i - 7].longs;
+    if (prev <= 0) continue;
+
+    const roc7d = ((longsData[i].longs - prev) / prev) * 100;
+    if (roc7d < BACKTEST_ROC_THRESHOLD) continue;
 
     const btcPrice = btcByDate.get(longsData[i].date);
     if (!btcPrice) continue;
@@ -126,7 +125,7 @@ function buildSpikeBacktest(
     rows.push({
       date: formatDate(longsData[i].date),
       longs: formatLongs(longsData[i].longs),
-      deviation: `+${deviation.toFixed(0)}%`,
+      roc7d: formatPercent(roc7d),
       btcPrice: `$${btcPrice.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
       btcReturn: isNaN(ret) ? "?" : formatPercent(ret),
     });
