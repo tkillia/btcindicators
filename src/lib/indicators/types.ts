@@ -18,7 +18,7 @@ export interface ChartDataSet {
 }
 
 export interface ChartConfig {
-  type: "line" | "bar" | "line+line";
+  type: "line" | "bar" | "line+line" | "line+histogram";
   logScale?: boolean;
 }
 

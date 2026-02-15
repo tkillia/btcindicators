@@ -27,7 +27,10 @@ export function LightweightChart({ data, config }: Props) {
 
     try {
       const isMobile = containerRef.current.clientWidth < 500;
-      const height = isMobile ? 220 : 280;
+      const isOverlay = config.type === "line+histogram";
+      const height = isOverlay
+        ? isMobile ? 280 : 380
+        : isMobile ? 220 : 280;
 
       const chart = createChart(containerRef.current, {
         ...chartTheme,
@@ -39,6 +42,15 @@ export function LightweightChart({ data, config }: Props) {
       if (config.logScale) {
         chart.priceScale("right").applyOptions({
           mode: PriceScaleMode.Logarithmic,
+          ...(isOverlay ? { scaleMargins: { top: 0, bottom: 0.3 } } : {}),
+        });
+      }
+
+      if (isOverlay) {
+        chart.priceScale("left").applyOptions({
+          visible: true,
+          borderColor: "#232334",
+          scaleMargins: { top: 0.7, bottom: 0 },
         });
       }
 
@@ -60,6 +72,7 @@ export function LightweightChart({ data, config }: Props) {
       if (data.bars) {
         const series = chart.addSeries(HistogramSeries, {
           priceLineVisible: false,
+          ...(isOverlay ? { priceScaleId: "left" } : {}),
         });
         series.setData(
           data.bars.map((b) => ({
@@ -96,7 +109,11 @@ export function LightweightChart({ data, config }: Props) {
   return (
     <div
       ref={containerRef}
-      className="w-full min-h-[220px] sm:min-h-[280px]"
+      className={`w-full ${
+        config.type === "line+histogram"
+          ? "min-h-[280px] sm:min-h-[380px]"
+          : "min-h-[220px] sm:min-h-[280px]"
+      }`}
     />
   );
 }
