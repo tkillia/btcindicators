@@ -11,7 +11,7 @@ import { Indicator, IndicatorResult } from "./types";
 const FEAR_THRESHOLD = 0.7; // high put/call = fear = contrarian buy
 const GREED_THRESHOLD = 0.4; // low put/call = greed = contrarian sell
 // Backtest: 7-day DVOL jump > 5 absolute points (e.g. 45→50)
-const DVOL_WEEKLY_JUMP = 5;
+const DVOL_WEEKLY_JUMP = 3;
 const DVOL_COOLDOWN = 21;
 
 export class DeribitOptions implements Indicator {
