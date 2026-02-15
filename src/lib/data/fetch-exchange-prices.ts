@@ -7,16 +7,28 @@ export interface ExchangePrice {
 /**
  * Fetch daily BTC/USDT candles from Binance.
  * Free, no auth. Max 1000 candles per request.
+ * Uses data-api.binance.vision (no geo-restriction) with api.binance.com fallback.
  */
 export async function fetchBinancePrices(
   days = 1000
 ): Promise<ExchangePrice[]> {
-  const res = await fetch(
+  const endpoints = [
+    `https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=${days}`,
     `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=${days}`,
-    { next: { tags: ["exchange-data"], revalidate: 86400 } }
-  );
+  ];
 
-  if (!res.ok) throw new Error(`Binance API error: ${res.status}`);
+  let res: Response | null = null;
+  for (const url of endpoints) {
+    const attempt = await fetch(url, {
+      next: { tags: ["exchange-data"], revalidate: 86400 },
+    });
+    if (attempt.ok) {
+      res = attempt;
+      break;
+    }
+  }
+
+  if (!res) throw new Error("Binance API unavailable (all endpoints failed)");
 
   const data = await res.json();
   if (!Array.isArray(data)) return [];
