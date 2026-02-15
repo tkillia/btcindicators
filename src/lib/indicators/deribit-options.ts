@@ -10,8 +10,8 @@ import { Indicator, IndicatorResult } from "./types";
 // Put/call ratio thresholds
 const FEAR_THRESHOLD = 0.7; // high put/call = fear = contrarian buy
 const GREED_THRESHOLD = 0.4; // low put/call = greed = contrarian sell
-// Backtest: DVOL spikes >20% above its 30d SMA (relative, adapts to vol regime)
-const DVOL_SMA_SPIKE_PCT = 10;
+// Backtest: 7-day DVOL jump > 5 absolute points (e.g. 45→50)
+const DVOL_WEEKLY_JUMP = 5;
 const DVOL_COOLDOWN = 21;
 
 export class DeribitOptions implements Indicator {
@@ -34,13 +34,12 @@ export class DeribitOptions implements Indicator {
 
     const pcr = opts.putCallRatio;
 
-    // Signal: contrarian — high put/call = buy (fear), low = sell (greed)
     let signal: "buy" | "neutral" | "sell";
     if (pcr >= FEAR_THRESHOLD) signal = "buy";
     else if (pcr <= GREED_THRESHOLD) signal = "sell";
     else signal = "neutral";
 
-    // Chart: DVOL (implied volatility index) over time with SMA
+    // Chart: DVOL over time with SMA
     const ivValues = dvol.map((d) => d.iv);
     const sma30 = sma(ivValues, 30);
 
@@ -54,9 +53,9 @@ export class DeribitOptions implements Indicator {
       }
     }
 
-    // Backtest: when DVOL spiked above its SMA (relative vol spike = fear)
+    // Backtest: when DVOL jumped rapidly (fear spike)
     const btcByDate = new Map(prices.map((p) => [p.date, p.close]));
-    const backtestRows = buildVolSpike(dvol, sma30, btcByDate);
+    const backtestRows = buildVolJump(dvol, btcByDate);
 
     const oiLabel =
       opts.totalOpenInterest >= 1e6
@@ -80,28 +79,25 @@ export class DeribitOptions implements Indicator {
         ],
       },
       chartConfig: { type: "line+line", logScale: false },
-      backtestTitle: `Every time DVOL spiked >${DVOL_SMA_SPIKE_PCT}% above its 30d SMA`,
-      backtestColumns: ["Date", "DVOL", "vs SMA", "BTC Price", "1mo Return"],
+      backtestTitle: `Every time DVOL jumped >${DVOL_WEEKLY_JUMP} pts in a week`,
+      backtestColumns: ["Date", "DVOL", "7d Change", "BTC Price", "1mo Return"],
       backtestRows: backtestRows,
     };
   }
 }
 
-function buildVolSpike(
+function buildVolJump(
   dvol: Array<{ date: string; iv: number }>,
-  sma30: number[],
   btcByDate: Map<string, number>
 ): Record<string, string | number>[] {
   const rows: Record<string, string | number>[] = [];
   let lastTrigger = -Infinity;
 
-  for (let i = 0; i < dvol.length; i++) {
+  for (let i = 7; i < dvol.length; i++) {
     if (i - lastTrigger < DVOL_COOLDOWN) continue;
-    if (isNaN(sma30[i]) || sma30[i] === 0) continue;
 
-    // Relative spike: how far above SMA is current DVOL?
-    const spikePct = ((dvol[i].iv - sma30[i]) / sma30[i]) * 100;
-    if (spikePct < DVOL_SMA_SPIKE_PCT) continue;
+    const weeklyChange = dvol[i].iv - dvol[i - 7].iv;
+    if (weeklyChange < DVOL_WEEKLY_JUMP) continue;
 
     const btcPrice = btcByDate.get(dvol[i].date);
     if (!btcPrice) continue;
@@ -118,7 +114,7 @@ function buildVolSpike(
     rows.push({
       date: formatDate(dvol[i].date),
       dvol: `${dvol[i].iv.toFixed(1)}%`,
-      vsSma: `+${spikePct.toFixed(0)}%`,
+      change: `+${weeklyChange.toFixed(1)} pts`,
       btcPrice: `$${btcPrice.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
       btcReturn: isNaN(ret) ? "?" : formatPercent(ret),
     });

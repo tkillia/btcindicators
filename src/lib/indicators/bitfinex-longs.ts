@@ -7,7 +7,7 @@ import { Indicator, IndicatorResult } from "./types";
 const SMA_PERIOD = 30;
 const BULLISH_THRESHOLD = 10; // 30d change > 10% = aggressive accumulation
 const BEARISH_THRESHOLD = -10;
-const BACKTEST_ROC_THRESHOLD = 3; // 7d change > 3% = significant position increase
+const BACKTEST_ROC_THRESHOLD = 2; // 7d change > 2% = significant position increase
 const BACKTEST_COOLDOWN = 14;
 
 function formatLongs(value: number): string {
