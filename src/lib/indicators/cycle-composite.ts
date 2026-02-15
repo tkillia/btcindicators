@@ -6,7 +6,10 @@ import {
   fetchCoinbasePrices,
 } from "../data/fetch-exchange-prices";
 import { fetchBitfinexLongs } from "../data/fetch-bitfinex-longs";
-import { fetchDeribitDVOL } from "../data/fetch-deribit-options";
+import {
+  fetchDeribitDVOL,
+  fetchDeribitOptionsSummary,
+} from "../data/fetch-deribit-options";
 import { sma } from "../utils/moving-average";
 import { formatDate, formatPercent, formatCurrency } from "../utils/format";
 import { Indicator, IndicatorResult, ChartBar } from "./types";
@@ -25,6 +28,8 @@ const LONGS_BUY_ROC = 10;
 const LONGS_SELL_ROC = -10;
 const DVOL_BUY = 60;
 const DVOL_SELL = 40;
+const PCR_BUY = 0.7; // P/C ratio thresholds (used for live day only)
+const PCR_SELL = 0.4;
 
 // Composite thresholds
 const COMPOSITE_BUY = 2;
@@ -48,7 +53,7 @@ export class CycleComposite implements Indicator {
 
   async calculate(prices: DailyPrice[]): Promise<IndicatorResult> {
     // 1. Fetch all external data in parallel
-    const [miningR, stablecoinR, binanceR, coinbaseR, bitfinexR, dvolR] =
+    const [miningR, stablecoinR, binanceR, coinbaseR, bitfinexR, dvolR, pcrR] =
       await Promise.allSettled([
         fetchMiningCost(),
         fetchStablecoinSupply(),
@@ -56,6 +61,7 @@ export class CycleComposite implements Indicator {
         fetchCoinbasePrices(1000),
         fetchBitfinexLongs(1095),
         fetchDeribitDVOL(730),
+        fetchDeribitOptionsSummary(),
       ]);
 
     const miningData =
@@ -70,6 +76,8 @@ export class CycleComposite implements Indicator {
       bitfinexR.status === "fulfilled" ? bitfinexR.value : [];
     const dvolData =
       dvolR.status === "fulfilled" ? dvolR.value : [];
+    const livePcr =
+      pcrR.status === "fulfilled" ? pcrR.value.putCallRatio : null;
 
     // 2. Build per-date signal maps
     const mayerSignals = computeMayerSignals(prices);
@@ -79,6 +87,15 @@ export class CycleComposite implements Indicator {
     const gapSignals = computeGapSignals(binanceData, coinbaseData);
     const longsSignals = computeLongsSignals(bitfinexData);
     const dvolSignals = computeDvolSignals(dvolData);
+
+    // Override the most recent day's DVOL signal with live P/C ratio
+    // (DVOL is a proxy; P/C ratio is the real sentiment gauge but has no history)
+    if (livePcr !== null && dvolData.length > 0) {
+      const lastDate = dvolData[dvolData.length - 1].date;
+      const pcrSignal =
+        livePcr >= PCR_BUY ? 1 : livePcr <= PCR_SELL ? -1 : 0;
+      dvolSignals.set(lastDate, pcrSignal);
+    }
 
     const allMaps = [
       mayerSignals,
