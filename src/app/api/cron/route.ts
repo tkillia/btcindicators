@@ -6,5 +6,7 @@ export async function GET() {
   revalidateTag("stablecoin-data");
   revalidateTag("exchange-data");
   revalidateTag("bitfinex-data");
+  revalidateTag("deribit-data");
+  revalidateTag("mining-data");
   return NextResponse.json({ revalidated: true, now: Date.now() });
 }
