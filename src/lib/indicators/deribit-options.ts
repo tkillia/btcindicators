@@ -11,7 +11,7 @@ import { Indicator, IndicatorResult } from "./types";
 const FEAR_THRESHOLD = 0.7; // high put/call = fear = contrarian buy
 const GREED_THRESHOLD = 0.4; // low put/call = greed = contrarian sell
 // Backtest: DVOL spikes >20% above its 30d SMA (relative, adapts to vol regime)
-const DVOL_SMA_SPIKE_PCT = 20;
+const DVOL_SMA_SPIKE_PCT = 10;
 const DVOL_COOLDOWN = 21;
 
 export class DeribitOptions implements Indicator {
