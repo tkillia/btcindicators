@@ -10,7 +10,7 @@ import { Indicator, IndicatorResult } from "./types";
 // Put/call ratio thresholds
 const FEAR_THRESHOLD = 0.7; // high put/call = fear = contrarian buy
 const GREED_THRESHOLD = 0.4; // low put/call = greed = contrarian sell
-const DVOL_SPIKE = 65; // backtest trigger: elevated implied vol
+const DVOL_SPIKE = 55; // backtest trigger: elevated implied vol
 const DVOL_COOLDOWN = 30;
 
 export class DeribitOptions implements Indicator {

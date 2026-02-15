@@ -10,7 +10,7 @@ import { Indicator, IndicatorResult } from "./types";
 // Coinbase premium thresholds (percentage)
 const BULLISH_THRESHOLD = 0.1;
 const BEARISH_THRESHOLD = -0.05;
-const BACKTEST_THRESHOLD = 0.2;
+const BACKTEST_THRESHOLD = 0.1;
 const BACKTEST_COOLDOWN = 14; // days
 
 interface GapDataPoint {

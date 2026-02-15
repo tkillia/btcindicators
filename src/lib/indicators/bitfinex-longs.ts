@@ -8,7 +8,7 @@ const SMA_PERIOD = 30;
 // When longs are significantly above/below their 30d average
 const BULLISH_THRESHOLD = 10; // 30d change > 10% = aggressive accumulation
 const BEARISH_THRESHOLD = -10;
-const SPIKE_THRESHOLD = 15; // backtest: longs >15% above SMA
+const SPIKE_THRESHOLD = 10; // backtest: longs >10% above SMA
 const SPIKE_COOLDOWN = 14;
 
 function formatLongs(value: number): string {
