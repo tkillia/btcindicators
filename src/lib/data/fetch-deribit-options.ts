@@ -83,7 +83,7 @@ export async function fetchDeribitDVOL(
   const start = now - days * 86400 * 1000;
 
   const res = await fetch(
-    `https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&start_timestamp=${start}&end_timestamp=${now}&resolution=86400000`,
+    `https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&start_timestamp=${start}&end_timestamp=${now}&resolution=86400`,
     { next: { tags: ["deribit-data"], revalidate: 86400 } }
   );
 
