@@ -28,30 +28,46 @@ export async function fetchBitfinexLongs(
     cursor = chunkStart - 1;
   }
 
-  // Fetch all chunks in parallel (typically 3 for 3yr)
+  // Fetch chunks sequentially to avoid Bitfinex rate limits
   const dailyMap = new Map<string, { timestamp: number; longs: number }>();
 
-  const responses = await Promise.all(
-    chunks.map(({ start, end }) =>
-      fetch(
-        `https://api-pub.bitfinex.com/v2/stats1/pos.size:1h:tBTCUSD:long/hist` +
-          `?start=${start}&end=${end}&limit=${POINTS_PER_CHUNK}&sort=-1`,
-        { next: { tags: ["bitfinex-data"], revalidate: 86400 } }
-      )
-        .then((r) => (r.ok ? r.json() : []))
-        .catch(() => [])
-    )
-  );
+  for (const { start, end } of chunks) {
+    const url =
+      `https://api-pub.bitfinex.com/v2/stats1/pos.size:1h:tBTCUSD:long/hist` +
+      `?start=${start}&end=${end}&limit=${POINTS_PER_CHUNK}&sort=-1`;
 
-  for (const data of responses) {
-    if (!Array.isArray(data)) continue;
-    for (const [ts, value] of data) {
-      const date = new Date(ts).toISOString().split("T")[0];
-      if (!dailyMap.has(date)) {
-        dailyMap.set(date, {
-          timestamp: Math.floor(ts / 1000),
-          longs: value,
+    let data: unknown = [];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await fetch(url, {
+          next: { tags: ["bitfinex-data"], revalidate: 86400 },
         });
+        if (r.status === 429) {
+          console.warn(`[bitfinex] rate-limited, waiting 5s (attempt ${attempt + 1})`);
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          continue;
+        }
+        if (!r.ok) {
+          console.warn(`[bitfinex] HTTP ${r.status} for chunk ${start}-${end}`);
+          break;
+        }
+        data = await r.json();
+        break;
+      } catch (err) {
+        console.warn(`[bitfinex] fetch error (attempt ${attempt + 1}):`, err);
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
+
+    if (Array.isArray(data)) {
+      for (const [ts, value] of data) {
+        const date = new Date(ts).toISOString().split("T")[0];
+        if (!dailyMap.has(date)) {
+          dailyMap.set(date, {
+            timestamp: Math.floor(ts / 1000),
+            longs: value,
+          });
+        }
       }
     }
   }
