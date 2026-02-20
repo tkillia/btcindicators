@@ -12,7 +12,7 @@ import {
 } from "../data/fetch-deribit-options";
 import { sma } from "../utils/moving-average";
 import { formatDate, formatPercent, formatCurrency } from "../utils/format";
-import { Indicator, IndicatorResult, ChartBar } from "./types";
+import { Indicator, IndicatorResult, ChartBar, ChartMarker } from "./types";
 
 // Signal thresholds (same as individual indicators)
 const MAYER_BUY = 0.8;
@@ -40,6 +40,13 @@ const BACKTEST_COOLDOWN = 60;
 
 const SECONDS_PER_WEEK = 7 * 24 * 60 * 60;
 
+const HALVING_DATES = [
+  "2012-11-28",
+  "2016-07-09",
+  "2020-05-11",
+  "2024-04-20",
+];
+
 interface DailyComposite {
   date: string;
   price: number;
@@ -59,7 +66,7 @@ export class CycleComposite implements Indicator {
         fetchStablecoinSupply(),
         fetchBinancePrices(1000),
         fetchCoinbasePrices(1000),
-        fetchBitfinexLongs(1095),
+        fetchBitfinexLongs(1825),
         fetchDeribitDVOL(730),
         fetchDeribitOptionsSummary(),
       ]);
@@ -146,10 +153,21 @@ export class CycleComposite implements Indicator {
       color: getCompositeColor(d.score),
     }));
 
+    // Build halving markers (only those within chart range)
+    const firstDate = composite[0].date;
+    const lastDate = composite[composite.length - 1].date;
+    const halvingMarkers: ChartMarker[] = HALVING_DATES
+      .filter((d) => d >= firstDate && d <= lastDate)
+      .map((d, i) => ({
+        time: d,
+        label: `H${i + 1}`,
+        color: "#eab308",
+      }));
+
     // 5. Build backtest
     const backtestRows = buildCompositeBacktest(composite, prices);
 
-    // 6. Current state
+    // 6. Current state + cycle position
     const latest = composite[composite.length - 1];
     const signal =
       latest.score >= COMPOSITE_BUY
@@ -159,11 +177,12 @@ export class CycleComposite implements Indicator {
           : ("neutral" as const);
 
     const scoreLabel = `${latest.score >= 0 ? "+" : ""}${latest.score}`;
+    const cycleInfo = getCyclePosition(latest.date);
 
     return {
       id: this.id,
       name: this.name,
-      description: `Aggregating ${latest.available} indicators into a single cycle score`,
+      description: `${latest.available} indicators · ${cycleInfo}`,
       currentValue: latest.score,
       currentValueLabel: `${scoreLabel} / ${latest.available}`,
       signal,
@@ -171,6 +190,7 @@ export class CycleComposite implements Indicator {
       chartData: {
         lines: [priceLine],
         bars,
+        markers: halvingMarkers,
       },
       chartConfig: { type: "line+histogram", logScale: true },
       backtestTitle: `Extreme composite readings (≥${BACKTEST_BUY} buy, ≤${BACKTEST_SELL} sell)`,
@@ -380,6 +400,27 @@ function getCompositeColor(score: number): string {
   if (score >= -1) return "#fca5a5"; // light red
   if (score >= -2) return "#ef4444"; // red
   return "#991b1b";                  // deep red
+}
+
+// --- Cycle position ---
+
+function getCyclePosition(dateStr: string): string {
+  const date = new Date(dateStr);
+  // Find the most recent halving before this date
+  let lastHalving = "";
+  let cycleNum = 1;
+  for (const h of HALVING_DATES) {
+    if (h <= dateStr) {
+      lastHalving = h;
+      cycleNum++;
+    }
+  }
+  if (!lastHalving) return "Pre-halving era";
+  const halvingDate = new Date(lastHalving);
+  const daysSince = Math.floor(
+    (date.getTime() - halvingDate.getTime()) / (86400 * 1000)
+  );
+  return `Day ${daysSince} of Cycle ${cycleNum} (since ${lastHalving.slice(0, 4)} halving)`;
 }
 
 // --- Backtest ---

@@ -14,7 +14,7 @@ const CHUNK_SPAN_MS = POINTS_PER_CHUNK * 3600 * 1000; // ~417 days at 1h resolut
  * then resamples to daily.
  */
 export async function fetchBitfinexLongs(
-  days = 1095
+  days = 1825
 ): Promise<BitfinexLongsPoint[]> {
   const now = Date.now();
   const startMs = now - days * MS_PER_DAY;

@@ -12,9 +12,16 @@ export interface ChartBar {
   color: string;
 }
 
+export interface ChartMarker {
+  time: string;
+  label: string;
+  color: string;
+}
+
 export interface ChartDataSet {
   lines?: ChartLine[];
   bars?: ChartBar[];
+  markers?: ChartMarker[];
 }
 
 export interface ChartConfig {

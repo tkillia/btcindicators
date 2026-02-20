@@ -8,6 +8,7 @@ import {
   HistogramSeries,
   PriceScaleMode,
   CrosshairMode,
+  createSeriesMarkers,
 } from "lightweight-charts";
 import type { ChartDataSet, ChartConfig } from "@/lib/indicators/types";
 import { chartTheme } from "./ChartTheme";
@@ -54,6 +55,8 @@ export function LightweightChart({ data, config }: Props) {
         });
       }
 
+      let firstLineSeries: ReturnType<typeof chart.addSeries> | null = null;
+
       if (data.lines) {
         for (const line of data.lines) {
           if (line.data.length === 0) continue;
@@ -66,7 +69,21 @@ export function LightweightChart({ data, config }: Props) {
           series.setData(
             line.data.map((d) => ({ time: d.time, value: d.value }))
           );
+          if (!firstLineSeries) firstLineSeries = series;
         }
+      }
+
+      if (data.markers && data.markers.length > 0 && firstLineSeries) {
+        createSeriesMarkers(
+          firstLineSeries,
+          data.markers.map((m) => ({
+            time: m.time,
+            position: "aboveBar" as const,
+            color: m.color,
+            shape: "arrowDown" as const,
+            text: m.label,
+          }))
+        );
       }
 
       if (data.bars) {
