@@ -40,6 +40,7 @@ export async function fetchBitfinexLongs(
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const r = await fetch(url, {
+          headers: { "User-Agent": "btcindicators/1.0" },
           next: { tags: ["bitfinex-data"], revalidate: 86400 },
         });
         if (r.status === 429) {
