@@ -1,34 +1,50 @@
 import { AltcoinToken, AltcoinScreenerData } from "./types";
-import { SYMBOL_TO_GECKO_ID, EXCLUDED_SYMBOLS } from "./token-config";
+import { SYMBOL_TO_GECKO_ID } from "./token-config";
 import { computeOiZScore, computeBreakoutScore } from "./compute-metrics";
 
-const BINANCE_FUTURES_TICKER =
-  "https://fapi.binance.com/fapi/v1/ticker/24hr";
-const BINANCE_PREMIUM_INDEX =
-  "https://fapi.binance.com/fapi/v1/premiumIndex";
-const BINANCE_OI_HIST =
-  "https://fapi.binance.com/futures/data/openInterestHist";
+const COINALYZE_BASE = "https://api.coinalyze.net/v1";
 const COINGECKO_MARKETS =
   "https://api.coingecko.com/api/v3/coins/markets";
 
 const TOP_N = 40;
 const OI_HISTORY_DAYS = 30;
+const COINALYZE_BATCH = 20; // max symbols per Coinalyze call
 
-interface BinanceTicker {
-  symbol: string;
-  lastPrice: string;
-  priceChangePercent: string;
-  quoteVolume: string;
+// --- Types ---
+
+interface CoinalyzeMarket {
+  symbol: string; // e.g. "ETHUSDT_PERP.A"
+  base_asset: string;
+  is_perpetual: boolean;
+  exchange: string;
+  has_ohlcv_data: boolean;
 }
 
-interface BinancePremiumIndex {
+interface CoinalyzeOI {
   symbol: string;
-  lastFundingRate: string;
+  value: number; // OI in base asset
 }
 
-interface BinanceOiHistPoint {
-  sumOpenInterestValue: string;
-  timestamp: number;
+interface CoinalyzeFunding {
+  symbol: string;
+  value: number; // funding rate decimal
+}
+
+interface CoinalyzeOiHistEntry {
+  symbol: string;
+  history: Array<{ t: number; o: number; h: number; l: number; c: number }>;
+}
+
+interface CoinalyzeOhlcvEntry {
+  symbol: string;
+  history: Array<{
+    t: number;
+    o: number;
+    h: number;
+    l: number;
+    c: number;
+    v: number;
+  }>;
 }
 
 interface GeckoMarket {
@@ -42,50 +58,43 @@ interface GeckoMarket {
   price_change_percentage_7d_in_currency: number | null;
 }
 
-// --- Individual fetchers (all graceful — never throw) ---
+// --- Coinalyze helpers ---
 
-async function fetchBinanceFuturesTickers(): Promise<BinanceTicker[]> {
+function coinalyzeHeaders(): Record<string, string> {
+  const key = process.env.COINALYZE_API_KEY;
+  if (!key) return {};
+  return { api_key: key };
+}
+
+async function coinalyzeFetch<T>(path: string): Promise<T | null> {
+  const key = process.env.COINALYZE_API_KEY;
+  if (!key) return null;
   try {
-    const r = await fetch(BINANCE_FUTURES_TICKER, {
+    const r = await fetch(`${COINALYZE_BASE}${path}`, {
+      headers: coinalyzeHeaders(),
       next: { tags: ["altcoin-data"], revalidate: 86400 },
     });
     if (!r.ok) {
-      console.warn(`[altcoins] Binance futures tickers: HTTP ${r.status}`);
-      return [];
+      console.warn(`[coinalyze] HTTP ${r.status} for ${path}`);
+      return null;
     }
     return r.json();
   } catch (err) {
-    console.warn("[altcoins] Binance futures tickers failed:", err);
-    return [];
+    console.warn(`[coinalyze] fetch error for ${path}:`, err);
+    return null;
   }
 }
 
-async function fetchBinanceFundingRates(): Promise<BinancePremiumIndex[]> {
-  try {
-    const r = await fetch(BINANCE_PREMIUM_INDEX, {
-      next: { tags: ["altcoin-data"], revalidate: 86400 },
-    });
-    if (!r.ok) return [];
-    return r.json();
-  } catch {
-    return [];
+/** Split array into chunks of size n */
+function chunk<T>(arr: T[], n: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) {
+    result.push(arr.slice(i, i + n));
   }
+  return result;
 }
 
-async function fetchOiHistory(
-  symbol: string
-): Promise<BinanceOiHistPoint[]> {
-  const url = `${BINANCE_OI_HIST}?symbol=${symbol}&period=1d&limit=${OI_HISTORY_DAYS}`;
-  try {
-    const r = await fetch(url, {
-      next: { tags: ["altcoin-data"], revalidate: 86400 },
-    });
-    if (!r.ok) return [];
-    return r.json();
-  } catch {
-    return [];
-  }
-}
+// --- CoinGecko ---
 
 async function fetchCoinGeckoMarkets(
   ids: string[]
@@ -99,12 +108,12 @@ async function fetchCoinGeckoMarkets(
       next: { tags: ["altcoin-data"], revalidate: 86400 },
     });
     if (!r.ok) {
-      console.warn(`[altcoins] CoinGecko markets: HTTP ${r.status}`);
+      console.warn(`[altcoins] CoinGecko: HTTP ${r.status}`);
       return [];
     }
     return r.json();
   } catch (err) {
-    console.warn("[altcoins] CoinGecko markets failed:", err);
+    console.warn("[altcoins] CoinGecko failed:", err);
     return [];
   }
 }
@@ -112,29 +121,12 @@ async function fetchCoinGeckoMarkets(
 // --- Orchestrator ---
 
 export async function fetchAllAltcoinData(): Promise<AltcoinScreenerData> {
-  // Step 1: Fetch CoinGecko (primary, always works) + Binance futures (may be geo-blocked)
+  // Step 1: Fetch Coinalyze markets + CoinGecko in parallel
   const allGeckoIds = [...Object.values(SYMBOL_TO_GECKO_ID), "bitcoin"];
-  const [geckoMarkets, binanceTickers, binanceFunding] = await Promise.all([
+  const [markets, geckoMarkets] = await Promise.all([
+    coinalyzeFetch<CoinalyzeMarket[]>("/future-markets"),
     fetchCoinGeckoMarkets(allGeckoIds),
-    fetchBinanceFuturesTickers(),
-    fetchBinanceFundingRates(),
   ]);
-
-  const hasBinance = binanceTickers.length > 0;
-
-  // Build Binance lookups
-  const binanceByBase = new Map<string, BinanceTicker>();
-  if (hasBinance) {
-    for (const t of binanceTickers) {
-      if (t.symbol.endsWith("USDT") && !EXCLUDED_SYMBOLS.has(t.symbol)) {
-        binanceByBase.set(t.symbol.replace("USDT", ""), t);
-      }
-    }
-  }
-  const fundingMap = new Map<string, number>();
-  for (const f of binanceFunding) {
-    fundingMap.set(f.symbol, parseFloat(f.lastFundingRate));
-  }
 
   // Build CoinGecko lookup
   const geckoBySymbol = new Map<string, GeckoMarket>();
@@ -146,53 +138,136 @@ export async function fetchAllAltcoinData(): Promise<AltcoinScreenerData> {
     }
   }
 
-  // Step 2: Build token list from CoinGecko data (always available), enrich with Binance
-  // Use CoinGecko as primary source, sorted by volume
+  // Filter to aggregated USDT perps that we have CoinGecko data for
+  const aggPerps = (markets ?? []).filter(
+    (m) =>
+      m.exchange === "A" &&
+      m.is_perpetual &&
+      m.symbol.endsWith("_PERP.A") &&
+      m.symbol.includes("USDT")
+  );
+
+  // Map: base asset → Coinalyze symbol
+  const baseToCoinalyze = new Map<string, string>();
+  for (const m of aggPerps) {
+    baseToCoinalyze.set(m.base_asset, m.symbol);
+  }
+
+  // Pick top N tokens by CoinGecko volume that have Coinalyze futures
   const geckoTokens = geckoMarkets
-    .filter((g) => g.id !== "bitcoin")
+    .filter(
+      (g) =>
+        g.id !== "bitcoin" &&
+        baseToCoinalyze.has(g.symbol.toUpperCase())
+    )
     .sort((a, b) => (b.total_volume ?? 0) - (a.total_volume ?? 0))
     .slice(0, TOP_N);
 
-  // Step 3: Fetch OI history in parallel (graceful — returns [] if Binance is blocked)
-  const oiResults = await Promise.all(
-    geckoTokens.map((g) => {
-      const base = g.symbol.toUpperCase();
-      return hasBinance ? fetchOiHistory(`${base}USDT`) : Promise.resolve([]);
-    })
-  );
+  const selectedBases = geckoTokens.map((g) => g.symbol.toUpperCase());
+  const coinalyzeSymbols = selectedBases
+    .map((b) => baseToCoinalyze.get(b)!)
+    .filter(Boolean);
 
-  // Step 4: Assemble token data
+  // Step 2: Fetch OI, funding, OI history from Coinalyze
+  // Process sequentially per batch to stay under 40 req/min rate limit
+  const symbolBatches = chunk(coinalyzeSymbols, COINALYZE_BATCH);
+  const now = Math.floor(Date.now() / 1000);
+  const from = now - OI_HISTORY_DAYS * 86400;
+
+  const oiResults: (CoinalyzeOI[] | null)[] = [];
+  const fundingResults: (CoinalyzeFunding[] | null)[] = [];
+  const oiHistResults: (CoinalyzeOiHistEntry[] | null)[] = [];
+  const ohlcvResults: (CoinalyzeOhlcvEntry[] | null)[] = [];
+
+  for (const batch of symbolBatches) {
+    const syms = batch.join(",");
+    // 4 calls per batch, run in parallel within each batch
+    const [oi, funding, oiHist, ohlcv] = await Promise.all([
+      coinalyzeFetch<CoinalyzeOI[]>(`/open-interest?symbols=${syms}`),
+      coinalyzeFetch<CoinalyzeFunding[]>(`/funding-rate?symbols=${syms}`),
+      coinalyzeFetch<CoinalyzeOiHistEntry[]>(
+        `/open-interest-history?symbols=${syms}&interval=daily&from=${from}&to=${now}`
+      ),
+      coinalyzeFetch<CoinalyzeOhlcvEntry[]>(
+        `/ohlcv-history?symbols=${syms}&interval=daily&from=${from}&to=${now}`
+      ),
+    ]);
+    oiResults.push(oi);
+    fundingResults.push(funding);
+    oiHistResults.push(oiHist);
+    ohlcvResults.push(ohlcv);
+  }
+
+  // Build lookups from Coinalyze results
+  const oiMap = new Map<string, number>();
+  for (const batch of oiResults) {
+    if (!batch) continue;
+    for (const item of batch) oiMap.set(item.symbol, item.value);
+  }
+
+  const fundingMap = new Map<string, number>();
+  for (const batch of fundingResults) {
+    if (!batch) continue;
+    for (const item of batch) fundingMap.set(item.symbol, item.value);
+  }
+
+  const oiHistMap = new Map<string, number[]>();
+  for (const batch of oiHistResults) {
+    if (!batch) continue;
+    for (const item of batch) {
+      oiHistMap.set(
+        item.symbol,
+        item.history.map((h) => h.c)
+      );
+    }
+  }
+
+  const volumeMap = new Map<string, number>();
+  for (const batch of ohlcvResults) {
+    if (!batch) continue;
+    for (const item of batch) {
+      // Sum last 24h volume (latest candle)
+      const latest = item.history[item.history.length - 1];
+      if (latest) volumeMap.set(item.symbol, latest.v);
+    }
+  }
+
+  // Step 3: Assemble token data
   const tokens: AltcoinToken[] = [];
-  for (let i = 0; i < geckoTokens.length; i++) {
-    const gecko = geckoTokens[i];
+  for (const gecko of geckoTokens) {
     const base = gecko.symbol.toUpperCase();
-    const binance = binanceByBase.get(base);
-    const oiHist = oiResults[i];
+    const cSymbol = baseToCoinalyze.get(base);
+    if (!cSymbol) continue;
 
     const price = gecko.current_price ?? 0;
     const priceChange24h = gecko.price_change_percentage_24h ?? 0;
     const priceChange7d =
       gecko.price_change_percentage_7d_in_currency ?? 0;
-    const volume24h = binance
-      ? parseFloat(binance.quoteVolume)
-      : gecko.total_volume ?? 0;
     const marketCap = gecko.market_cap ?? 0;
     const fdv = gecko.fully_diluted_valuation ?? 0;
 
-    const fundingRate = fundingMap.get(`${base}USDT`) ?? 0;
+    // Coinalyze OI (in base asset) → convert to USD
+    const oiBase = oiMap.get(cSymbol) ?? 0;
+    const openInterest = oiBase * price;
+
+    // OI history → z-score (in base asset units, z-score is scale-invariant)
+    const oiHist = oiHistMap.get(cSymbol) ?? [];
+    const oiZScore = computeOiZScore(oiHist);
+
+    // OI 24h change from history
+    const prevOi = oiHist.length > 1 ? oiHist[oiHist.length - 2] : 0;
+    const currOi = oiHist.length > 0 ? oiHist[oiHist.length - 1] : 0;
+    const oiChange24h = prevOi > 0 ? ((currOi - prevOi) / prevOi) * 100 : 0;
+
+    // Funding rate → APR
+    const fundingRate = fundingMap.get(cSymbol) ?? 0;
     const fundingApr = fundingRate * 3 * 365 * 100;
 
-    // OI metrics
-    const oiValues = oiHist.map((p) =>
-      parseFloat(p.sumOpenInterestValue)
-    );
-    const currentOi =
-      oiValues.length > 0 ? oiValues[oiValues.length - 1] : 0;
-    const prevOi =
-      oiValues.length > 1 ? oiValues[oiValues.length - 2] : currentOi;
-    const oiChange24h =
-      prevOi > 0 ? ((currentOi - prevOi) / prevOi) * 100 : 0;
-    const oiZScore = computeOiZScore(oiValues);
+    // Futures volume (USD) from Coinalyze, fallback to CoinGecko spot
+    const futuresVol = volumeMap.get(cSymbol);
+    const volume24h = futuresVol
+      ? futuresVol * price
+      : gecko.total_volume ?? 0;
 
     const relativeStrength =
       btcChange7d !== 0 ? priceChange7d / btcChange7d : 0;
@@ -205,7 +280,7 @@ export async function fetchAllAltcoinData(): Promise<AltcoinScreenerData> {
       volume24h,
       marketCap,
       fdv,
-      openInterest: currentOi,
+      openInterest,
       oiChange24h,
       oiZScore,
       fundingRate,
