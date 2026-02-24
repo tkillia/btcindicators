@@ -187,19 +187,22 @@ export async function fetchAllAltcoinData(): Promise<AltcoinScreenerData> {
   const oiHistResults: (CoinalyzeOiHistEntry[] | null)[] = [];
   const ohlcvResults: (CoinalyzeOhlcvEntry[] | null)[] = [];
 
-  for (let bi = 0; bi < symbolBatches.length; bi++) {
-    if (bi > 0) await new Promise((r) => setTimeout(r, 2000)); // rate limit gap
-    const syms = symbolBatches[bi].join(",");
-    const [oi, funding, oiHist, ohlcv] = await Promise.all([
-      coinalyzeFetch<CoinalyzeOI[]>(`/open-interest?symbols=${syms}`),
-      coinalyzeFetch<CoinalyzeFunding[]>(`/funding-rate?symbols=${syms}`),
-      coinalyzeFetch<CoinalyzeOiHistEntry[]>(
-        `/open-interest-history?symbols=${syms}&interval=daily&from=${from}&to=${now}`
-      ),
-      coinalyzeFetch<CoinalyzeOhlcvEntry[]>(
-        `/ohlcv-history?symbols=${syms}&interval=daily&from=${from}&to=${now}`
-      ),
-    ]);
+  // Fetch all Coinalyze data fully sequentially (1.5s gap) to avoid burst rate limits
+  const delay = () => new Promise((r) => setTimeout(r, 1500));
+  for (const batch of symbolBatches) {
+    const syms = batch.join(",");
+    const oi = await coinalyzeFetch<CoinalyzeOI[]>(`/open-interest?symbols=${syms}`);
+    await delay();
+    const funding = await coinalyzeFetch<CoinalyzeFunding[]>(`/funding-rate?symbols=${syms}`);
+    await delay();
+    const oiHist = await coinalyzeFetch<CoinalyzeOiHistEntry[]>(
+      `/open-interest-history?symbols=${syms}&interval=daily&from=${from}&to=${now}`
+    );
+    await delay();
+    const ohlcv = await coinalyzeFetch<CoinalyzeOhlcvEntry[]>(
+      `/ohlcv-history?symbols=${syms}&interval=daily&from=${from}&to=${now}`
+    );
+    await delay();
     oiResults.push(oi);
     fundingResults.push(funding);
     oiHistResults.push(oiHist);
