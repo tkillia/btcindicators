@@ -69,20 +69,28 @@ function coinalyzeHeaders(): Record<string, string> {
 async function coinalyzeFetch<T>(path: string): Promise<T | null> {
   const key = process.env.COINALYZE_API_KEY;
   if (!key) return null;
-  try {
-    const r = await fetch(`${COINALYZE_BASE}${path}`, {
-      headers: coinalyzeHeaders(),
-      next: { tags: ["altcoin-data"], revalidate: 86400 },
-    });
-    if (!r.ok) {
-      console.warn(`[coinalyze] HTTP ${r.status} for ${path}`);
-      return null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await fetch(`${COINALYZE_BASE}${path}`, {
+        headers: coinalyzeHeaders(),
+        next: { tags: ["altcoin-data"], revalidate: 86400 },
+      });
+      if (r.status === 429) {
+        console.warn(`[coinalyze] 429 rate-limited, waiting ${(attempt + 1) * 3}s`);
+        await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 3000));
+        continue;
+      }
+      if (!r.ok) {
+        console.warn(`[coinalyze] HTTP ${r.status} for ${path}`);
+        return null;
+      }
+      return r.json();
+    } catch (err) {
+      console.warn(`[coinalyze] fetch error for ${path}:`, err);
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 2000));
     }
-    return r.json();
-  } catch (err) {
-    console.warn(`[coinalyze] fetch error for ${path}:`, err);
-    return null;
   }
+  return null;
 }
 
 /** Split array into chunks of size n */
@@ -179,9 +187,9 @@ export async function fetchAllAltcoinData(): Promise<AltcoinScreenerData> {
   const oiHistResults: (CoinalyzeOiHistEntry[] | null)[] = [];
   const ohlcvResults: (CoinalyzeOhlcvEntry[] | null)[] = [];
 
-  for (const batch of symbolBatches) {
-    const syms = batch.join(",");
-    // 4 calls per batch, run in parallel within each batch
+  for (let bi = 0; bi < symbolBatches.length; bi++) {
+    if (bi > 0) await new Promise((r) => setTimeout(r, 2000)); // rate limit gap
+    const syms = symbolBatches[bi].join(",");
     const [oi, funding, oiHist, ohlcv] = await Promise.all([
       coinalyzeFetch<CoinalyzeOI[]>(`/open-interest?symbols=${syms}`),
       coinalyzeFetch<CoinalyzeFunding[]>(`/funding-rate?symbols=${syms}`),
