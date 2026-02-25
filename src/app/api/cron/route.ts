@@ -9,5 +9,6 @@ export async function GET() {
   revalidateTag("deribit-data");
   revalidateTag("mining-data");
   revalidateTag("altcoin-data");
+  revalidateTag("korean-data");
   return NextResponse.json({ revalidated: true, now: Date.now() });
 }

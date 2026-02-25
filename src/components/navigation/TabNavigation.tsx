@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const tabs = [
   { label: "BTC", href: "/" },
   { label: "Altcoins", href: "/altcoins" },
+  { label: "Korean Alts", href: "/korean" },
 ];
 
 export function TabNavigation() {
