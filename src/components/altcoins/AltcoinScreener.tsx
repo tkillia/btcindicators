@@ -2,6 +2,7 @@
 
 import { AltcoinScreenerData } from "@/lib/altcoins/types";
 import { TokenTable } from "./TokenTable";
+import { RefreshButton } from "@/components/shared/RefreshButton";
 
 interface Props {
   data: AltcoinScreenerData;
@@ -14,18 +15,21 @@ export function AltcoinScreener({ data }: Props) {
 
   return (
     <div>
-      <header className="mb-5 sm:mb-8">
-        <h1 className="text-xl sm:text-2xl font-bold text-foreground">
-          Altcoin Screener
-        </h1>
-        <p className="text-xs sm:text-sm text-muted mt-1">
-          Top {data.tokens.length} by futures volume · BTC 7d:{" "}
-          <span className={data.btcChange7d >= 0 ? "text-buy" : "text-sell"}>
-            {data.btcChange7d >= 0 ? "+" : ""}
-            {data.btcChange7d.toFixed(1)}%
-          </span>{" "}
-          · Updated {data.lastUpdated}
-        </p>
+      <header className="mb-5 sm:mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+            Altcoin Screener
+          </h1>
+          <p className="text-xs sm:text-sm text-muted mt-1">
+            Top {data.tokens.length} by futures volume · BTC 7d:{" "}
+            <span className={data.btcChange7d >= 0 ? "text-buy" : "text-sell"}>
+              {data.btcChange7d >= 0 ? "+" : ""}
+              {data.btcChange7d.toFixed(1)}%
+            </span>{" "}
+            · Updated {data.lastUpdated}
+          </p>
+        </div>
+        <RefreshButton />
       </header>
 
       {notable.length > 0 && (

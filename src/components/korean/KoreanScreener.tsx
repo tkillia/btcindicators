@@ -2,6 +2,7 @@
 
 import { KoreanScreenerData } from "@/lib/korean/types";
 import { KoreanTable } from "./KoreanTable";
+import { RefreshButton } from "@/components/shared/RefreshButton";
 
 interface Props {
   data: KoreanScreenerData;
@@ -13,23 +14,26 @@ export function KoreanScreener({ data }: Props) {
 
   return (
     <div>
-      <header className="mb-5 sm:mb-8">
-        <h1 className="text-xl sm:text-2xl font-bold text-foreground">
-          Korean Alts Screener
-        </h1>
-        <p className="text-xs sm:text-sm text-muted mt-1">
-          {data.tokens.length} tokens on Upbit/Bithumb · BTC Kimchi Premium:{" "}
-          <span
-            className={
-              data.btcKimchiPremium >= 0 ? "text-buy" : "text-sell"
-            }
-          >
-            {data.btcKimchiPremium >= 0 ? "+" : ""}
-            {data.btcKimchiPremium.toFixed(2)}%
-          </span>{" "}
-          · KRW/USD: ₩{data.impliedKrwUsd.toFixed(0)} · Updated{" "}
-          {data.lastUpdated}
-        </p>
+      <header className="mb-5 sm:mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+            Korean Alts Screener
+          </h1>
+          <p className="text-xs sm:text-sm text-muted mt-1">
+            {data.tokens.length} tokens on Upbit/Bithumb · BTC Kimchi Premium:{" "}
+            <span
+              className={
+                data.btcKimchiPremium >= 0 ? "text-buy" : "text-sell"
+              }
+            >
+              {data.btcKimchiPremium >= 0 ? "+" : ""}
+              {data.btcKimchiPremium.toFixed(2)}%
+            </span>{" "}
+            · KRW/USD: ₩{data.impliedKrwUsd.toFixed(0)} · Updated{" "}
+            {data.lastUpdated}
+          </p>
+        </div>
+        <RefreshButton />
       </header>
 
       {highPremium.length > 0 && (
