@@ -7,11 +7,13 @@ import { BinanceCoinbaseGap } from "./binance-coinbase-gap";
 import { BitfinexLongs } from "./bitfinex-longs";
 import { DeribitOptions } from "./deribit-options";
 import { MiningCost } from "./mining-cost";
+import { RealizedPrice } from "./realized-price";
 
 export const indicators: Indicator[] = [
   new CycleComposite(),
   new MayerMultiple(),
   new TwoHundredWMA(),
+  new RealizedPrice(),
   new StablecoinSupply(),
   new BinanceCoinbaseGap(),
   new BitfinexLongs(),
